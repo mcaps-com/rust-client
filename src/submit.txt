@@ -1,0 +1,191 @@
+mod amm_instruction;
+
+use std::str::FromStr;
+use std::thread;
+use std::thread::sleep;
+use std::time::Duration;
+use solana_client::nonblocking::rpc_client::RpcClient;
+use solana_program::instruction::Instruction;
+use solana_sdk::{
+    instruction::{AccountMeta},
+    pubkey::Pubkey,
+    signature::Signer,
+    signer::keypair::Keypair,
+    transaction::Transaction,
+};
+
+use base64;
+use base64::encode;
+use bincode::{ErrorKind, serialize};
+use solana_client::rpc_client::SerializableTransaction;
+use solana_client::rpc_config::RpcSendTransactionConfig;
+use solana_client::rpc_request::RpcError;
+use solana_program::message::Message;
+use solana_program::system_instruction::{SystemInstruction, transfer};
+use solana_program::system_program;
+use solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel};
+use solana_sdk::compute_budget::ComputeBudgetInstruction;
+use solana_sdk::signature::Signature;
+use crate::amm_instruction::{AmmInstruction, SwapInstructionBaseIn};
+
+use futures::future::join_all;
+use helius::error::HeliusError;
+use helius::Helius;
+use helius::types::{Cluster, GetPriorityFeeEstimateOptions, GetPriorityFeeEstimateRequest, GetPriorityFeeEstimateResponse};
+use solana_client::nonblocking::blockhash_query::BlockhashQuery::Rpc;
+use solana_sdk::transaction::VersionedTransaction;
+
+type ClientResult<T> = Result<T, RpcError>;
+
+pub trait Submission {
+    async fn send_and_confirm_transaction_with_config(
+        &self,
+        transaction: &impl SerializableTransaction,
+        config: RpcSendTransactionConfig,
+    ) -> ClientResult<Signature>;
+}
+
+// impl Submission for RpcClient {
+//     async fn send_and_confirm_transaction_with_config(
+//         &self,
+//         transaction: &impl SerializableTransaction,
+//         config: RpcSendTransactionConfig,
+//     ) -> ClientResult<Signature> {
+//         const SEND_RETRIES: usize = 1;
+//         const GET_STATUS_RETRIES: usize = usize::MAX;
+//
+//         'sending: for _ in 0..SEND_RETRIES {
+//
+//
+//             let recent_blockhash = if transaction.uses_durable_nonce() {
+//                 let (recent_blockhash, ..) = self
+//                     .get_latest_blockhash_with_commitment(CommitmentConfig::processed())
+//                     .await.unwrap();
+//                 recent_blockhash
+//             } else {
+//                 *transaction.get_recent_blockhash()
+//             };
+//
+//
+//             match self.get_signature_status(&signature).await.unwrap() {
+//                 Some(Err(e)) => return Err(RpcError::ParseError(e.to_string())),
+//                 _ => return Ok(signature),
+//
+//             }
+//         }
+//
+//         Err(RpcError::ForUser(
+//             "unable to confirm transaction. \
+//              This can happen in situations such as transaction expiration \
+//              and insufficient fee-payer funds"
+//                 .to_string(),
+//         )
+//             .into())
+//     }
+// }
+
+
+#[tokio::main]
+async fn main() {
+    for i in 0..5{
+        tokio::spawn(async {
+            for i in 0..5{
+                tokio::task::spawn(async move {
+                    let quick_node = "https://mainnet.helius-rpc.com/?api-key=00000";
+                    let helius = "https://wandering-omniscient-choice.solana-mainnet.quiknode.pro/000";
+                    let get_block = "https://go.getblock.io/000";
+                    let solana = "https://api.mainnet-beta.solana.com";
+                    let alchemyh = "https://solana-mainnet.g.alchemy.com/v2/000";
+                    let syndica = "https://solana-mainnet.api.syndica.io/api-token/35nWdSkR8jhN5QW9ZJw4TE0000jzCwVsjcWwVgdsM3MtpXe6U9VSjeQzy2CjqUFyi39wWFGhmey1Eh941Xs3sU5mvdrxyKYJwnTMwWCu7M1csRnG6GR5intMGB6st2TJeD9nCfMhM4RPRiTq0000FbbuzWE8vwn6i91EBRH000nSTK7VRSphM4uSgEfH2uqWs3jFs6kyvXstv1s8CZjB5M14gCiUvHaLJaPZpjotHid2JUtecX9Z36MqSp2ZCodBG4Ydz6FUcbdbRh23V8rx1jPLY4VNtqzKD9iy0003BM4DTbhES9J3cLai5f7TsHP3dPhTkuhvVCJrkquHSn87y7ccdvvihoKc3S5JYsYaeHCSewv7QEiqvkYpDPWxKSW4fX2QThZhLsovTUqhpvWtvtKp5iN";
+                    let vibes = "https://api.solanavibestation.com/?api_key=000";
+                    // let clients = vec![RpcClient::new(helius.to_owned()), RpcClient::new(quick_node.to_owned()), RpcClient::new(alchemyh.to_owned()), RpcClient::new(helius.to_owned()), RpcClient::new(quick_node.to_owned()), RpcClient::new(solana.to_owned()), RpcClient::new(get_block.to_owned()), RpcClient::new(syndica.to_owned())];
+                    let clients = vec![RpcClient::new(vibes.to_owned())];
+                    let program_id = Pubkey::from_str("CSybVZV96FEJMB79pUXF2WdScWbp7TMPFf7acDZ3qmSS").unwrap();
+                    let raydium_program_id = Pubkey::from_str("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8").unwrap();
+                    let payer = Keypair::from_bytes(&[...]).unwrap();
+                    let data = AmmInstruction::SwapBaseIn(SwapInstructionBaseIn {
+                        amount_in: 50000,
+                        minimum_amount_out: 0,
+                    })
+
+                        .pack().unwrap();
+
+                    let amm_id = Pubkey::from_str("Ds32KFjzvbnYEisyUQUqvhA1f9kzjGpAuiPjzb5VRGwW").unwrap();
+                    let amm_authority = Pubkey::from_str("5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1").unwrap();
+                    let amm_open_orders = Pubkey::from_str("CJZT5vf6aMxZTwURehDzESKBNbL7WNhocE8GzLmQRJWP").unwrap();
+                    let pool_coin_token_account = Pubkey::from_str("8Cbb7qwM3HZ4rKmB8C9iKKJQWnNEgbdYqCxTCGmdVQP9").unwrap();
+                    let pool_pc_token_account = Pubkey::from_str("EdHVHG7NyMPTjYpL8rjG1rBgw9fRZLEdCL6aK5hBZQV9").unwrap();
+                    let serum_program_id = Pubkey::from_str("srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX").unwrap();
+                    let serum_market = Pubkey::from_str("GgfHhmNDYSBcyfXSZ49379Q287sm5tGiDJhhevvt64Md").unwrap();
+                    let serum_bids = Pubkey::from_str("HfPBQXwjqi3M8JybiybyLtK8BRVjpNPRQY7SA5oo2B4u").unwrap();
+                    let serum_asks = Pubkey::from_str("47v8BarJURZpLNNUqgn5sXyF5ZnVitBUxxw6Qc7oEZXQ").unwrap();
+                    let serum_event_queue = Pubkey::from_str("BiMEaq8XWNbWxLHj26F45TWXmxZicydvpXqRt9iTNsGs").unwrap();
+                    let serum_coin_vault_account = Pubkey::from_str("97EtBfPvNNnmrcLPysnncpDCen5kny3MWkQpmPBJZJq7").unwrap();
+                    let serum_pc_vault_account = Pubkey::from_str("7tusU5mwaNPR3BmuxsNdqkXhjexcQcLTMPHdMerbjKJC").unwrap();
+                    let serum_vault_signer = Pubkey::from_str("8UkFZLuKC5hJrHF3LnvmhCxpKJVRq2xaAvB6nehe7QcY").unwrap();
+                    let user_source_token_account = Pubkey::from_str("Ge5wkAxiHLuXEwYigLR5B6CFrEEiNa3fan5ysLSWyrgC").unwrap();
+                    let user_destination_token_account = Pubkey::from_str("y7cv9UHAmFpE8JcjYmMNoWpuejZAfjDsqjU1kYZLiSX").unwrap();
+                    let user_source_owner = Pubkey::from_str("6cvjvu348mVkWZjnwqHMxdNKbAy8EB3JfaqrYzWcCK6H").unwrap();
+
+                    let accounts = vec![
+                        // spl token
+                        AccountMeta::new_readonly(spl_token::id(), false),
+                        // amm
+                        AccountMeta::new(amm_id, false),
+                        AccountMeta::new_readonly(amm_authority, false),
+                        AccountMeta::new(amm_open_orders, false),
+                        AccountMeta::new(pool_coin_token_account, false),
+                        AccountMeta::new(pool_pc_token_account, false),
+                        // serum
+                        AccountMeta::new_readonly(serum_program_id, false),
+                        AccountMeta::new(serum_market, false),
+                        AccountMeta::new(serum_bids, false),
+                        AccountMeta::new(serum_asks, false),
+                        AccountMeta::new(serum_event_queue, false),
+                        AccountMeta::new(serum_coin_vault_account, false),
+                        AccountMeta::new(serum_pc_vault_account, false),
+                        AccountMeta::new_readonly(serum_vault_signer, false),
+                        // user
+                        AccountMeta::new(user_source_token_account, false),
+                        AccountMeta::new(user_destination_token_account, false),
+                        AccountMeta::new(user_source_owner, true),
+                        AccountMeta::new_readonly(raydium_program_id, false),
+                    ];
+
+
+                    let instruction = Instruction {
+                        program_id,
+                        accounts,
+                        data,
+                    };
+
+                    println!("Time before blockhash transaction: {:?}", chrono::Local::now());
+                    let recent_blockhash = clients[(i % 1) as usize].get_latest_blockhash().await.unwrap();
+
+                    let transaction_2 = Transaction::new_signed_with_payer(
+                        &[
+                            ComputeBudgetInstruction::set_compute_unit_limit(1000000),
+                            ComputeBudgetInstruction::set_compute_unit_price(10000),
+                            instruction,
+                        ],
+                        Some(&payer.pubkey()),
+                        &[&payer],
+                        recent_blockhash,
+                    );
+
+                    println!("Time before sending transaction: {:?}", chrono::Local::now());
+                    let signature = clients[(i % 1) as usize].send_transaction_with_config(&transaction_2, RpcSendTransactionConfig {
+                        skip_preflight: true,
+                        max_retries: Some(1),
+                        preflight_commitment: Some(CommitmentLevel::Processed),
+                        ..RpcSendTransactionConfig::default()
+                    }).await.unwrap();
+
+                    signature
+                });
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        });
+        tokio::time::sleep(Duration::from_millis(800)).await;
+    }
+}
